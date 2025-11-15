@@ -85,6 +85,7 @@ Listen to `FastSharePlugin.events` Stream for:
   - `rawMessage`: Plain text message for UI display
 
 Log format: `[LEVEL-FastShare-CODE] \x1B[COLORmMESSAGE\x1B[0m`
+<img width="1119" height="270" alt="Screenshot 2025-11-15 212810" src="https://github.com/user-attachments/assets/dc14cab4-ed09-4484-9db0-2545e88ff8f7" />
 
 ## AndroidManifest Permissions
 
@@ -145,3 +146,4 @@ Logs are sent to Flutter via the event stream with `event: "log"` containing:
 - Multi-stream parallel sending can be added by modifying FileSender to use multiple sockets.
 
 # Dev: mortza mansory
+
