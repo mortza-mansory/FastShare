@@ -141,4 +141,7 @@ Logs are sent to Flutter via the event stream with `event: "log"` containing:
 - Files are saved to `/sdcard/Download/fastshare/`.
 - For high speeds, ensure devices are close and no interference.
 - Resume is basic; full resume on disconnect not implemented.
+
 - Multi-stream parallel sending can be added by modifying FileSender to use multiple sockets.
+
+# Dev: mortza mansory
