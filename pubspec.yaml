@@ -1,7 +1,7 @@
 name: fastshare_plugin
 description: A Flutter plugin for ultra-high-speed offline file sharing using Hotspot + TCP sockets.
-version: 1.0.0
-homepage:
+version: 0.0.1
+homepage: https://github.com/mortza-mansory/FastShare
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
