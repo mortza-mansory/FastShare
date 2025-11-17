@@ -72,6 +72,8 @@ class HotspotManager(private val context: Context) {
         Logger.debug("HOTSPOT_STOP", "Stopping LocalOnlyHotspot")
         reservation?.close()
         reservation = null
+        hotspotCallback = null
+        networkCallback = null
         hotspotInfo = null
         Logger.success("HOTSPOT_STOPPED", "LocalOnlyHotspot stopped successfully")
     }

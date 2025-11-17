@@ -1,193 +1,193 @@
 package com.myapp.fastshare_plugin
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.content.ContextCompat
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import org.json.JSONObject
 
 class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
-    private lateinit var channel: MethodChannel
+
+    private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
     private lateinit var context: Context
     private var eventSink: EventChannel.EventSink? = null
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private lateinit var hotspotManager: HotspotManager
     private lateinit var socketServer: SocketServer
     private lateinit var socketClient: SocketClient
-    private var filesToSend = mutableListOf<String>()
 
-    override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        context = flutterPluginBinding.applicationContext
-        channel = MethodChannel(flutterPluginBinding.binaryMessenger, "fastshare_plugin")
-        channel.setMethodCallHandler(this)
+    private val filesToSend = mutableListOf<String>()
 
-        eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "fastshare_events")
+    // ========== SAFE EMIT TO FLUTTER ==========
+    private fun emitJson(json: String) {
+        mainHandler.post {
+            try { eventSink?.success(json) }
+            catch (_: Exception) {}
+        }
+    }
+
+    private fun emit(event: String, payload: Map<String, Any?> = emptyMap()) {
+        val root = JSONObject()
+        val data = JSONObject()
+
+        root.put("event", event)
+        root.put("timestamp", System.currentTimeMillis())
+
+        payload.forEach { (k, v) ->
+            if (v == null) data.put(k, JSONObject.NULL) else data.put(k, v)
+        }
+        root.put("payload", data)
+
+        emitJson(root.toString())
+    }
+
+    // For SocketServer and SocketClient emissions
+    private fun componentEmit(ev: Any?) {
+        when (ev) {
+            is Map<*, *> -> {
+                val clean = hashMapOf<String, Any?>()
+                ev.forEach { (k, v) -> clean[k.toString()] = v }
+
+                val e = clean["event"]?.toString() ?: "unknown"
+                clean.remove("event")
+                emit(e, clean)
+            }
+            is String -> emitJson(ev)
+            else -> emit("componentEvent", mapOf("value" to ev.toString()))
+        }
+    }
+
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        context = binding.applicationContext
+
+        methodChannel = MethodChannel(binding.binaryMessenger, "fastshare_plugin")
+        methodChannel.setMethodCallHandler(this)
+
+        eventChannel = EventChannel(binding.binaryMessenger, "fastshare_events")
         eventChannel.setStreamHandler(this)
 
-        // Set up logging callback to send logs to Flutter
-        Logger.logEventCallback = { logEvent -> sendLogEvent(logEvent) }
-
         hotspotManager = HotspotManager(context)
-        socketServer = SocketServer(eventSink)
-        socketClient = SocketClient(eventSink)
+        socketServer = SocketServer { ev -> componentEmit(ev) }
+        socketClient  = SocketClient  { ev -> componentEmit(ev) }
 
-        Logger.success("PLUGIN_INIT", "FastShare plugin initialized successfully")
+        Logger.logEventCallback = { log ->
+            emit("log", mapOf(
+                "level" to log.level,
+                "code" to log.code,
+                "message" to log.coloredMessage
+            ))
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        Logger.debug("PLUGIN_DETACH", "Detaching FastShare plugin from engine")
-        channel.setMethodCallHandler(null)
-        eventChannel.setStreamHandler(null)
-        socketServer.stop()
-        hotspotManager.stopHotspot()
+        eventSink = null
         Logger.logEventCallback = null
-        Logger.success("PLUGIN_DETACHED", "FastShare plugin detached successfully")
-    }
-
-    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        when (call.method) {
-            "checkPermissions" -> checkPermissions(result)
-            "requestPermissions" -> requestPermissions(result)
-            "startHotspot" -> startHotspot(result)
-            "stopHotspot" -> stopHotspot(result)
-            "startServer" -> startServer(result)
-            "stopServer" -> stopServer(result)
-            "connectToHotspot" -> connectToHotspot(call, result)
-            "setFilesToSend" -> setFilesToSend(call, result)
-            "startReceiving" -> startReceiving(call, result)
-            else -> result.notImplemented()
-        }
-    }
-
-    private fun checkPermissions(result: MethodChannel.Result) {
-        Logger.debug("PLUGIN_CHECK_PERMISSIONS", "Checking required permissions")
-        val permissions = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-        }
-        permissions.add(Manifest.permission.ACCESS_WIFI_STATE)
-        permissions.add(Manifest.permission.CHANGE_WIFI_STATE)
-
-        val granted = permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
-        Logger.debug("PLUGIN_PERMISSIONS_STATUS", "Permissions granted: $granted")
-        result.success(granted)
-    }
-
-    private fun requestPermissions(result: MethodChannel.Result) {
-        Logger.debug("PLUGIN_REQUEST_PERMISSIONS", "Permission request initiated (handled in Flutter)")
-        // Note: Actual permission request should be handled in Flutter
-        result.success(null)
-    }
-
-    private fun startHotspot(result: MethodChannel.Result) {
-        Logger.debug("PLUGIN_START_HOTSPOT", "Starting hotspot via HotspotManager")
-        hotspotManager.startHotspot(
-            onSuccess = { info ->
-                Logger.success("PLUGIN_HOTSPOT_SUCCESS", "Hotspot started: ${info.ssid}")
-                result.success(mapOf(
-                    "ssid" to info.ssid,
-                    "password" to info.password,
-                    "ip" to info.ip,
-                    "port" to info.port
-                ))
-                eventSink?.success(mapOf("event" to "hotspotStarted", "info" to info))
-            },
-            onFailure = { error ->
-                Logger.error("PLUGIN_HOTSPOT_FAILED", "Hotspot start failed: $error")
-                result.error("HOTSPOT_FAILED", error, null)
-                eventSink?.success(mapOf("event" to "hotspotFailed", "error" to error))
-            }
-        )
-    }
-
-    private fun stopHotspot(result: MethodChannel.Result) {
-        Logger.debug("PLUGIN_STOP_HOTSPOT", "Stopping hotspot")
-        hotspotManager.stopHotspot()
-        result.success(null)
-    }
-
-    private fun startServer(result: MethodChannel.Result) {
-        val port = 8080 // or from call
-        Logger.debug("PLUGIN_START_SERVER", "Starting TCP server on port $port")
-        socketServer.start(port) { error ->
-            Logger.error("PLUGIN_SERVER_FAILED", "Server start failed: $error")
-            result.error("SERVER_FAILED", error, null)
-        }
-        result.success(null)
-    }
-
-    private fun stopServer(result: MethodChannel.Result) {
-        Logger.debug("PLUGIN_STOP_SERVER", "Stopping TCP server")
-        socketServer.stop()
-        result.success(null)
-    }
-
-    private fun connectToHotspot(call: MethodCall, result: MethodChannel.Result) {
-        val ssid = call.argument<String>("ssid") ?: return result.error("INVALID_ARG", "SSID required", null)
-        val password = call.argument<String>("password") ?: return result.error("INVALID_ARG", "Password required", null)
-        Logger.debug("PLUGIN_CONNECT_HOTSPOT", "Connecting to hotspot: $ssid")
-        hotspotManager.connectToHotspot(ssid, password,
-            onConnected = {
-                Logger.success("PLUGIN_CONNECT_SUCCESS", "Connected to hotspot: $ssid")
-                result.success(null)
-            },
-            onFailure = { error ->
-                Logger.error("PLUGIN_CONNECT_FAILED", "Failed to connect to hotspot: $error")
-                result.error("CONNECT_FAILED", error, null)
-            }
-        )
-    }
-
-    private fun setFilesToSend(call: MethodCall, result: MethodChannel.Result) {
-        val paths = call.argument<List<String>>("filePaths")
-        Logger.debug("PLUGIN_SET_FILES", "Setting ${paths?.size ?: 0} files to send")
-        if (paths != null) {
-            filesToSend.clear()
-            filesToSend.addAll(paths)
-            socketServer.filesToSend.clear()
-            socketServer.filesToSend.addAll(paths)
-            Logger.verbose("PLUGIN_FILES_CONFIGURED", "Files configured for sending")
-        }
-        result.success(null)
-    }
-
-    private fun startReceiving(call: MethodCall, result: MethodChannel.Result) {
-        val host = call.argument<String>("host") ?: return result.error("INVALID_ARG", "Host required", null)
-        val port = call.argument<Int>("port") ?: 8080
-        Logger.debug("PLUGIN_START_RECEIVING", "Starting file reception from $host:$port")
-        socketClient.connectAndReceive(host, port) { error ->
-            Logger.error("PLUGIN_RECEIVE_FAILED", "File reception failed: $error")
-            result.error("RECEIVE_FAILED", error, null)
-        }
-        result.success(null)
     }
 
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
-        Logger.debug("PLUGIN_EVENT_LISTEN", "Event channel listener attached")
+        emit("pluginReady")
     }
 
     override fun onCancel(arguments: Any?) {
         eventSink = null
-        Logger.debug("PLUGIN_EVENT_CANCEL", "Event channel listener detached")
     }
 
-    // Method to send log events to Flutter
-    fun sendLogEvent(logEvent: Logger.LogEvent) {
-        eventSink?.success(mapOf(
-            "event" to "log",
-            "level" to logEvent.level,
-            "code" to logEvent.code,
-            "coloredMessage" to logEvent.coloredMessage,
-            "rawMessage" to logEvent.rawMessage
-        ))
+    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+
+        when (call.method) {
+
+            // ---------------- HOTSPOT ----------------
+            "startHotspot" -> {
+                hotspotManager.startHotspot(
+                    onSuccess = { info ->
+                        emit("hotspotStarted", mapOf(
+                            "ssid" to info.ssid,
+                            "password" to info.password,
+                            "ip" to info.ip,
+                            "port" to info.port
+                        ))
+                        result.success(null)
+                    },
+                    onFailure = { err ->
+                        emit("errorOccurred", mapOf("message" to err))
+                        result.error("HOTSPOT_FAILED", err, null)
+                    }
+                )
+            }
+
+            "stopHotspot" -> {
+                hotspotManager.stopHotspot()
+                emit("hotspotStopped")
+                result.success(null)
+            }
+
+            // ---------------- CONNECTION ----------------
+            "connectToHotspot" -> {
+                val ssid = call.argument<String>("ssid")
+                    ?: return result.error("INVALID_ARG", "Missing ssid", null)
+
+                val pass = call.argument<String>("password") ?: ""
+
+                hotspotManager.connectToHotspot(
+                    ssid, pass,
+                    onConnected = {
+                        emit("connectedToHotspot", mapOf("ssid" to ssid))
+                        result.success(null)
+                    },
+                    onFailure = { err ->
+                        emit("errorOccurred", mapOf("message" to err))
+                        result.error("CONNECT_FAIL", err, null)
+                    }
+                )
+            }
+
+            // ---------------- SERVER ----------------
+            "startServer" -> {
+                val port = call.argument<Int>("port") ?: 8080
+
+                socketServer.start(port) { err ->
+                    emit("errorOccurred", mapOf("message" to err))
+                }
+
+                result.success(null)
+            }
+
+            "stopServer" -> {
+                socketServer.stop()
+                emit("serverStopped")
+                result.success(null)
+            }
+
+            "setFilesToSend" -> {
+                val list = call.argument<List<String>>("filePaths") ?: emptyList()
+                filesToSend.clear()
+                filesToSend.addAll(list)
+                socketServer.setFiles(filesToSend)
+                result.success(null)
+            }
+
+            // ---------------- CLIENT RECEIVE ----------------
+            "startReceiving" -> {
+                val host = call.argument<String>("host")
+                    ?: return result.error("INVALID_ARG", "Host missing", null)
+
+                val port = call.argument<Int>("port") ?: 8080
+
+                socketClient.connectAndReceive(host, port) { err ->
+                    emit("errorOccurred", mapOf("message" to err))
+                }
+
+                result.success(null)
+            }
+
+            else -> result.notImplemented()
+        }
     }
 }

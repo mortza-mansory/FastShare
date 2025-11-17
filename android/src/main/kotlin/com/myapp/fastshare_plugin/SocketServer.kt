@@ -1,71 +1,65 @@
 package com.myapp.fastshare_plugin
 
-import android.util.Log
-import io.flutter.plugin.common.EventChannel
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
 
-class SocketServer(private val eventSink: EventChannel.EventSink?) {
+class SocketServer(private val emit: (Any?) -> Unit) {
+
     private var serverSocket: ServerSocket? = null
     private val executor = Executors.newCachedThreadPool()
     private var isRunning = false
-    var filesToSend = mutableListOf<String>()
+    private var filesToSend = mutableListOf<String>()
+
+    fun setFiles(list: List<String>) {
+        filesToSend.clear()
+        filesToSend.addAll(list)
+    }
 
     fun start(port: Int, onError: (String) -> Unit) {
-        Logger.debug("SERVER_START", "Attempting to start TCP server on port $port")
+        emit(mapOf("event" to "log", "message" to "Starting server on $port"))
         try {
             serverSocket = ServerSocket(port)
             isRunning = true
-            Logger.success("SERVER_STARTED", "TCP server started successfully on port $port")
-            eventSink?.success(mapOf("event" to "serverStarted", "port" to port))
+            emit(mapOf("event" to "serverStarted", "port" to port))
             executor.execute {
-                Logger.verbose("SERVER_LISTEN_LOOP", "Entering client accept loop")
                 while (isRunning) {
                     try {
-                        Logger.debug("SERVER_WAIT_CLIENT", "Waiting for client connection...")
-                        val clientSocket = serverSocket?.accept()
-                        clientSocket?.let {
-                            Logger.success("SERVER_CLIENT_ACCEPT", "Accepted client connection from ${it.inetAddress.hostAddress}")
-                            handleClient(it)
+                        val client = serverSocket?.accept()
+                        if (client != null) {
+                            emit(mapOf("event" to "clientConnected", "address" to client.inetAddress.hostAddress))
+                            handleClient(client)
                         }
                     } catch (e: IOException) {
                         if (isRunning) {
-                            Logger.error("SERVER_ACCEPT_ERROR", "Server accept error: ${e.message}")
-                            onError("Server accept error: ${e.message}")
+                            onError("Accept error: ${e.message}")
                         }
                     }
                 }
             }
         } catch (e: IOException) {
-            Logger.error("SERVER_START_FAIL", "Failed to start TCP server: ${e.message}")
-            onError("Failed to start server: ${e.message}")
+            onError("Server start failed: ${e.message}")
         }
     }
 
     fun stop() {
-        Logger.debug("SERVER_STOP", "Stopping TCP server")
         isRunning = false
-        serverSocket?.close()
-        executor.shutdown()
-        Logger.success("SERVER_STOPPED", "TCP server stopped successfully")
+        try { serverSocket?.close() } catch (_: Exception) {}
+        executor.shutdownNow()
+        emit(mapOf("event" to "serverStopped"))
     }
 
     private fun handleClient(socket: Socket) {
         executor.execute {
             try {
-                Logger.debug("SERVER_HANDLE_CLIENT", "Starting file transfer session with client ${socket.inetAddress.hostAddress}")
-                eventSink?.success(mapOf("event" to "clientConnected", "address" to socket.inetAddress.hostAddress))
-                val fileSender = FileSender(socket, eventSink, filesToSend)
-                fileSender.sendFiles()
-                Logger.success("SERVER_CLIENT_DONE", "File transfer completed for client ${socket.inetAddress.hostAddress}")
+                val sender = FileSender(socket, { ev -> emit(ev) }, filesToSend.toList())
+                sender.sendFiles()
+                emit(mapOf("event" to "sendingCompleted"))
             } catch (e: Exception) {
-                Logger.error("SERVER_CLIENT_ERROR", "Client handling error: ${e.message}")
-                eventSink?.success(mapOf("event" to "errorOccurred", "error" to e.message))
+                emit(mapOf("event" to "errorOccurred", "message" to e.message))
             } finally {
-                Logger.verbose("SERVER_CLIENT_CLOSE", "Closing client socket")
-                socket.close()
+                try { socket.close() } catch (_: Exception) {}
             }
         }
     }
