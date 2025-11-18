@@ -178,6 +178,27 @@ class HotspotManager(private val context: Context) {
         return "192.168.43.1" // Default hotspot IP
     }
 
+    fun scanHotspots(onSuccess: (List<Map<String, Any>>) -> Unit, onFailure: (String) -> Unit) {
+        Logger.debug("HOTSPOT_SCAN", "Starting WiFi scan for hotspots")
+        try {
+            val scanResults = wifiManager.scanResults
+            val hotspots = scanResults.filter { result ->
+                result.SSID.startsWith("FastShare_")
+            }.map { result ->
+                mapOf(
+                    "ssid" to result.SSID,
+                    "bssid" to result.BSSID,
+                    "level" to result.level
+                )
+            }
+            Logger.success("HOTSPOT_SCAN_SUCCESS", "Found ${hotspots.size} hotspots")
+            onSuccess(hotspots)
+        } catch (e: Exception) {
+            Logger.error("HOTSPOT_SCAN_ERROR", "Error scanning hotspots: ${e.message}")
+            onFailure("Failed to scan hotspots: ${e.message}")
+        }
+    }
+
     private fun generatePassword(): String {
         val password = "FastShare" + (100000 + (Math.random() * 900000).toInt())
         Logger.debug("HOTSPOT_PASSWORD_GEN", "Generated hotspot password")

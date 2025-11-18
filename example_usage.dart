@@ -1,6 +1,36 @@
+/*
+  FastShare Plugin Example Usage
+
+  This example demonstrates how to use the FastSharePlugin to send and receive files
+  over a local hotspot connection. It includes initialization, event handling, and
+  starting/stopping sender and receiver modes.
+
+  Note: This is a simplified example for demonstration purposes. In a real application,
+  you would implement proper UI and error handling.
+  You can use documents such as diagrams, charts, markdown files as helper this is a very basic usage of the fastshare_plugin.
+
+  github: https://github.com/mortza-mansory/FastShare
+  Version: 0.0.1
+  Creator: mortza mansory
+*/
+
+import 'package:fastshare_plugin/fastshare_plugin.dart';
 import 'dart:async';
-import 'lib/fastshare_plugin.dart';
-import 'package:permission_handler/permission_handler.dart';
+
+void main() async {
+  final manager = FileSharingManager();
+  manager.init();
+
+  // Example as sender (client that sends files)
+  // await manager.startAsSender(['/path/to/file1.txt', '/path/to/file2.jpg']);
+
+  // Example as receiver (hotspot owner that receives files)
+  // await manager.startAsReceiver();
+
+  // Keep the app running to listen to events
+  await Future.delayed(Duration(seconds: 30));
+  manager.dispose();
+}
 
 class FileSharingManager {
   StreamSubscription? _subscription;
@@ -13,17 +43,6 @@ class FileSharingManager {
 
   void dispose() {
     _subscription?.cancel();
-  }
-
-  Future<void> requestPermissions() async {
-    // Request location for hotspot
-    var status = await Permission.location.request();
-    if (status.isGranted) {
-      // For Android 13+
-      if (await Permission.nearbyWifiDevices.isGranted == false) {
-        await Permission.nearbyWifiDevices.request();
-      }
-    }
   }
 
   void handleEvent(FastShareEvent event) {
@@ -68,34 +87,70 @@ class FileSharingManager {
     try {
       // Check and request permissions
       if (!await FastSharePlugin.checkPermissions()) {
-        await requestPermissions();
+        await FastSharePlugin.requestPermissions();
       }
 
-      // Set files to send
-      await FastSharePlugin.setFilesToSend(filePaths);
+      // Scan for available hotspots
+      var hotspots = await FastSharePlugin.scanHotspots();
+      if (hotspots.isEmpty) {
+        print('No hotspots found');
+        return;
+      }
 
-      // Start hotspot
-      var hotspotInfo = await FastSharePlugin.startHotspot();
-      print('Hotspot started: ${hotspotInfo['ssid']} / ${hotspotInfo['password']}');
+      // Connect to the first hotspot (in real app, let user choose)
+      var hotspot = hotspots[0];
+      await FastSharePlugin.connectToHotspot(hotspot['ssid'], hotspot['password'] ?? '');
 
-      // Start server
-      await FastSharePlugin.startServer();
+      // Start sending files to the hotspot IP (assume default)
+      await FastSharePlugin.startSending('192.168.43.1', 8080, filePaths);
 
-      // Share hotspotInfo with receiver (e.g., via QR code)
+      print('Sending started.');
     } catch (e) {
       print('Error starting sender: $e');
     }
   }
 
-  Future<void> startAsReceiver(Map<String, dynamic> hotspotInfo) async {
+  Future<void> startAsReceiver() async {
     try {
-      // Connect to hotspot
-      await FastSharePlugin.connectToHotspot(hotspotInfo['ssid'], hotspotInfo['password']);
+      // Check and request permissions
+      if (!await FastSharePlugin.checkPermissions()) {
+        await FastSharePlugin.requestPermissions();
+      }
 
-      // Start receiving
-      await FastSharePlugin.startReceiving(hotspotInfo['ip'], hotspotInfo['port']);
+      // Start hotspot
+      await FastSharePlugin.startHotspot();
+
+      // Start server to receive files
+      await FastSharePlugin.startServer();
+
+      print('Receiver started. Hotspot is active, waiting for connections.');
     } catch (e) {
       print('Error starting receiver: $e');
+    }
+  }
+
+  Future<void> stopAsReceiver() async {
+    try {
+      // Stop server
+      await FastSharePlugin.stopServer();
+
+      // Stop hotspot
+      await FastSharePlugin.stopHotspot();
+
+      print('Receiver stopped.');
+    } catch (e) {
+      print('Error stopping receiver: $e');
+    }
+  }
+
+  Future<void> stopAsSender() async {
+    try {
+      // Disconnect from hotspot
+      await FastSharePlugin.disconnectFromHotspot();
+
+      print('Sender stopped.');
+    } catch (e) {
+      print('Error stopping sender: $e');
     }
   }
 }

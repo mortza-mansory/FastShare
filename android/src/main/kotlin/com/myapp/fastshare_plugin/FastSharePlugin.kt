@@ -128,6 +128,12 @@ class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCha
                 result.success(null)
             }
 
+            "disconnectFromHotspot" -> {
+                hotspotManager.disconnectFromHotspot()
+                emit("disconnectedFromHotspot")
+                result.success(null)
+            }
+
             // ---------------- CONNECTION ----------------
             "connectToHotspot" -> {
                 val ssid = call.argument<String>("ssid")
@@ -185,6 +191,33 @@ class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCha
                 }
 
                 result.success(null)
+            }
+
+            "startSending" -> {
+                val host = call.argument<String>("host")
+                    ?: return result.error("INVALID_ARG", "Missing host", null)
+
+                val port = call.argument<Int>("port") ?: 8080
+
+                val filePaths = call.argument<List<String>>("filePaths") ?: emptyList()
+
+                socketClient.connectAndSend(host, port, filePaths) { err ->
+                    emit("errorOccurred", mapOf("message" to err))
+                }
+
+                result.success(null)
+            }
+
+            "scanHotspots" -> {
+                hotspotManager.scanHotspots(
+                    onSuccess = { hotspots ->
+                        result.success(hotspots)
+                    },
+                    onFailure = { err ->
+                        emit("errorOccurred", mapOf("message" to err))
+                        result.error("SCAN_FAILED", err, null)
+                    }
+                )
             }
 
             else -> result.notImplemented()

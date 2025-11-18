@@ -8,7 +8,7 @@ import java.util.concurrent.Executors
 class SocketServer(private val emit: (Any?) -> Unit) {
 
     private var serverSocket: ServerSocket? = null
-    private val executor = Executors.newCachedThreadPool()
+    private var executor = Executors.newCachedThreadPool()
     private var isRunning = false
     private var filesToSend = mutableListOf<String>()
 
@@ -20,6 +20,10 @@ class SocketServer(private val emit: (Any?) -> Unit) {
     fun start(port: Int, onError: (String) -> Unit) {
         emit(mapOf("event" to "log", "message" to "Starting server on $port"))
         try {
+            // Recreate executor if terminated
+            if (executor.isTerminated) {
+                executor = Executors.newCachedThreadPool()
+            }
             serverSocket = ServerSocket(port)
             isRunning = true
             emit(mapOf("event" to "serverStarted", "port" to port))
@@ -53,9 +57,9 @@ class SocketServer(private val emit: (Any?) -> Unit) {
     private fun handleClient(socket: Socket) {
         executor.execute {
             try {
-                val sender = FileSender(socket, { ev -> emit(ev) }, filesToSend.toList())
-                sender.sendFiles()
-                emit(mapOf("event" to "sendingCompleted"))
+                val receiver = FileReceiver(socket, { ev -> emit(ev) })
+                receiver.receiveFiles()
+                emit(mapOf("event" to "receivingCompleted"))
             } catch (e: Exception) {
                 emit(mapOf("event" to "errorOccurred", "message" to e.message))
             } finally {

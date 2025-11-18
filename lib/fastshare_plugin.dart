@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/services.dart';
 
 class FastSharePlugin {
@@ -6,10 +7,26 @@ class FastSharePlugin {
   static const EventChannel _eventChannel = EventChannel('fastshare_events');
 
   static Stream<Map<String, dynamic>>? _eventStream;
+
   static Stream<Map<String, dynamic>> get events {
-    _eventStream ??= _eventChannel.receiveBroadcastStream().map((event) => Map<String, dynamic>.from(event));
+    _eventStream ??= _eventChannel
+        .receiveBroadcastStream()
+        .map((raw) {
+      try {
+        if (raw is String) {
+          return jsonDecode(raw) as Map<String, dynamic>;
+        }
+        return <String, dynamic>{};
+      } catch (e) {
+        print('FastSharePlugin JSON decode error: $e');
+        return <String, dynamic>{};
+      }
+    });
+
     return _eventStream!;
   }
+
+  // ===================== METHOD CALLS =====================
 
   static Future<bool> checkPermissions() async {
     final result = await _channel.invokeMethod('checkPermissions');
@@ -20,17 +37,20 @@ class FastSharePlugin {
     await _channel.invokeMethod('requestPermissions');
   }
 
-  static Future<Map<String, dynamic>> startHotspot() async {
-    final result = await _channel.invokeMethod('startHotspot');
-    return Map<String, dynamic>.from(result);
+  static Future<void> startHotspot() async {
+    await _channel.invokeMethod('startHotspot');
   }
 
   static Future<void> stopHotspot() async {
     await _channel.invokeMethod('stopHotspot');
   }
 
-  static Future<void> startServer() async {
-    await _channel.invokeMethod('startServer');
+  static Future<void> disconnectFromHotspot() async {
+    await _channel.invokeMethod('disconnectFromHotspot');
+  }
+
+  static Future<void> startServer({int port = 8080}) async {
+    await _channel.invokeMethod('startServer', {"port": port});
   }
 
   static Future<void> stopServer() async {
@@ -56,7 +76,24 @@ class FastSharePlugin {
       'port': port,
     });
   }
+
+  static Future<void> startSending(String host, int port, List<String> filePaths) async {
+    await _channel.invokeMethod('startSending', {
+      'host': host,
+      'port': port,
+      'filePaths': filePaths,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> scanHotspots() async {
+    final result = await _channel.invokeMethod('scanHotspots');
+    return (result as List<dynamic>).map((e) => e as Map<String, dynamic>).toList();
+  }
 }
+
+// ===========================================================
+// OPTIONAL – IF YOU USE FastShareEvent
+// ===========================================================
 
 class FastShareEvent {
   final String event;
@@ -67,11 +104,17 @@ class FastShareEvent {
   FastShareEvent(this.event, this.data, {this.coloredMessage, this.rawMessage});
 
   factory FastShareEvent.fromMap(Map<String, dynamic> map) {
+    final copy = Map<String, dynamic>.from(map);
+
+    final event = copy.remove('event') ?? 'unknown';
+    final colored = copy.remove('coloredMessage');
+    final raw = copy.remove('rawMessage');
+
     return FastShareEvent(
-      map['event'],
-      map..remove('event')..remove('coloredMessage')..remove('rawMessage'),
-      coloredMessage: map['coloredMessage'],
-      rawMessage: map['rawMessage'],
+      event,
+      copy,
+      coloredMessage: colored,
+      rawMessage: raw,
     );
   }
 }

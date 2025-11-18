@@ -22,3 +22,4 @@ flutter:
       android:
         package: com.myapp.fastshare_plugin
         pluginClass: FastSharePlugin
+

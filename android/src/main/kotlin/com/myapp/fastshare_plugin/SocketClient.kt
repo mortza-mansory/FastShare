@@ -8,8 +8,31 @@ class SocketClient(private val emit: (Any?) -> Unit) {
 
     private val executor = Executors.newSingleThreadExecutor()
 
-    fun connectAndReceive(host: String, port: Int, onError: (String) -> Unit) {
+    fun connectAndSend(host: String, port: Int, files: List<String>, onError: (String) -> Unit) {
         emit(mapOf("event" to "log", "message" to "Client connecting to $host:$port"))
+        executor.execute {
+            var socket: Socket? = null
+            try {
+                socket = Socket()
+                socket.connect(InetSocketAddress(host, port), Protocol.TIMEOUT_MS.toInt())
+                socket.tcpNoDelay = true
+                socket.receiveBufferSize = Protocol.BUFFER_SIZE
+                socket.sendBufferSize = Protocol.BUFFER_SIZE
+
+                val sender = FileSender(socket, { ev -> emit(ev) }, files)
+                sender.sendFiles()
+                emit(mapOf("event" to "sendingCompleted"))
+            } catch (e: Exception) {
+                onError(e.message ?: "Unknown")
+                emit(mapOf("event" to "errorOccurred", "message" to e.message))
+            } finally {
+                try { socket?.close() } catch (_: Exception) {}
+            }
+        }
+    }
+
+    fun connectAndReceive(host: String, port: Int, onError: (String) -> Unit) {
+        emit(mapOf("event" to "log", "message" to "Client connecting to $host:$port for receiving"))
         executor.execute {
             var socket: Socket? = null
             try {
