@@ -1,0 +1,20 @@
+flowchart TD
+    A[Start] --> B{Check Permissions}
+    B -->|Granted| C[Scan Hotspots]
+    B -->|Not Granted| D[Request Permissions]
+    D --> B
+    C --> E{Hotspots Found?}
+    E -->|No| F[Error: No Hotspots]
+    E -->|Yes| G[Select Hotspot]
+    G --> H[Connect to Hotspot]
+    H --> I[Connected to Hotspot Event]
+    I --> J[Start Sending Files]
+    J --> K[Sending Started Event]
+    K --> L[Sending Progress Events]
+    L --> M[Sending Completed Event]
+    M --> N[Disconnect from Hotspot]
+    N --> O[End]
+
+    style A fill:#e1f5fe
+    style O fill:#c8e6c9
+    style F fill:#ffced

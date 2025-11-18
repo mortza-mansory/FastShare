@@ -1,0 +1,17 @@
+flowchart TD
+    A[Start] --> B{Check Permissions}
+    B -->|Granted| C[Start Hotspot]
+    B -->|Not Granted| D[Request Permissions]
+    D --> B
+    C --> E[Hotspot Started Event]
+    E --> F[Start Server on Port 8080]
+    F --> G[Server Started Event]
+    G --> H[Wait for Client Connection]
+    H --> I[Client Connected Event]
+    I --> J[Handle Client - Receive Files]
+    J --> K[Receiving Progress Events]
+    K --> L[Receiving Completed Event]
+    L --> M[End]
+
+    style A fill:#e1f5fe
+    style M fill:#c8e6c9

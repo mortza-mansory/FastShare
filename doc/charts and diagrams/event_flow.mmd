@@ -1,0 +1,52 @@
+stateDiagram-v2
+    [*] --> Ready: pluginReady
+
+    Ready --> PermissionCheck: checkPermissions()
+    PermissionCheck --> HotspotStarting: startHotspot()
+    HotspotStarting --> HotspotActive: hotspotStarted
+    HotspotActive --> ServerStarting: startServer()
+    ServerStarting --> ServerActive: serverStarted
+
+    Ready --> Scanning: scanHotspots()
+    Scanning --> Connecting: connectToHotspot()
+    Connecting --> Connected: connectedToHotspot
+
+    Connected --> Sending: startSending()
+    Sending --> Transferring: sendingStarted
+    Transferring --> Transferring: sendingProgress
+    Transferring --> Completed: sendingCompleted
+
+    ServerActive --> Receiving: clientConnected
+    Receiving --> TransferringR: receivingStarted
+    TransferringR --> TransferringR: receivingProgress
+    TransferringR --> CompletedR: receivingCompleted
+
+    HotspotActive --> HotspotStopped: stopHotspot()
+    ServerActive --> ServerStopped: stopServer()
+    Connected --> Disconnected: disconnectFromHotspot()
+
+    HotspotStopped --> [*]
+    ServerStopped --> [*]
+    Disconnected --> [*]
+    Completed --> Disconnected
+    CompletedR --> ServerActive
+
+    note right of PermissionCheck
+        Check/request permissions
+        for hotspot access
+    end note
+
+    note right of Scanning
+        Discover available
+        hotspots
+    end note
+
+    note right of Transferring
+        File chunks sent
+        with progress updates
+    end note
+
+    note right of TransferringR
+        File chunks received
+        with progress updates
+    end note

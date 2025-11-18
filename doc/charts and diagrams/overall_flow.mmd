@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant Receiver
+    participant Sender
+
+    Note over Receiver,Sender: Setup Phase
+    Receiver->>Receiver: checkPermissions()
+    Receiver->>Receiver: requestPermissions() if needed
+    Receiver->>Receiver: startHotspot()
+    Receiver->>Receiver: startServer()
+
+    Note over Receiver,Sender: Connection Phase
+    Sender->>Sender: checkPermissions()
+    Sender->>Sender: requestPermissions() if needed
+    Sender->>Sender: scanHotspots()
+    Sender->>Sender: connectToHotspot(ssid, password)
+
+    Note over Receiver,Sender: Transfer Phase
+    Sender->>Sender: startSending(host, port, filePaths)
+    Sender->>Receiver: TCP Connection
+    Receiver->>Receiver: handleClient() - receives files
+    Receiver->>Sender: Files transferred
+
+    Note over Receiver,Sender: Cleanup Phase
+    Sender->>Sender: disconnectFromHotspot()
+    Receiver->>Receiver: stopServer()
+    Receiver->>Receiver: stopHotspot()
