@@ -85,8 +85,33 @@ class FastSharePlugin {
     });
   }
 
+  static Future<void> enableWifi() async {
+    await _channel.invokeMethod('enableWifi');
+  }
+
   static Future<List<Map<String, dynamic>>> scanHotspots() async {
     final result = await _channel.invokeMethod('scanHotspots');
+    return (result as List<dynamic>).map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  static Future<void> startWifiDirect() async {
+    await _channel.invokeMethod('startWifiDirect');
+  }
+
+  static Future<void> stopWifiDirect() async {
+    await _channel.invokeMethod('stopWifiDirect');
+  }
+
+  static Future<void> discoverWifiDirectPeers() async {
+    await _channel.invokeMethod('discoverWifiDirectPeers');
+  }
+
+  static Future<void> connectToWifiDirectPeer(String deviceAddress) async {
+    await _channel.invokeMethod('connectToWifiDirectPeer', {'deviceAddress': deviceAddress});
+  }
+
+  static Future<List<Map<String, dynamic>>> getWifiDirectPeers() async {
+    final result = await _channel.invokeMethod('getWifiDirectPeers');
     return (result as List<dynamic>).map((e) => e as Map<String, dynamic>).toList();
   }
 }

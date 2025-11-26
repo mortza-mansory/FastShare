@@ -1,5 +1,7 @@
 # FastShare Plugin
 
+**Version: 0.0.2**
+
 A Flutter plugin for ultra-high-speed offline file sharing using Android Hotspot and TCP sockets.
 
 ## Features
@@ -17,12 +19,19 @@ A Flutter plugin for ultra-high-speed offline file sharing using Android Hotspot
 
 1. Add the plugin to your Flutter project:
    - Copy the `fastshare_plugin` directory to your project's root or plugins folder.
-   - In your `pubspec.yaml`, add:
-     ```
-     dependencies:
-       fastshare_plugin:
-         path: ./fastshare_plugin
-     ```
+
+  ```yaml
+  dependencies:
+    fastshare_plugin: ^0.0.1
+  ```
+
+or use github repo and locally add to pat for lasted version:
+
+  ```yaml
+  dependencies:
+    fastshare_plugin:
+      path: ./fastshare_plugin
+  ```
 
 2. For Android:
    - Ensure your `android/app/src/main/AndroidManifest.xml` includes the permissions from `fastshare_plugin/android/src/main/AndroidManifest.xml`.
@@ -46,6 +55,8 @@ A Flutter plugin for ultra-high-speed offline file sharing using Android Hotspot
 5. Usage example:
    See `example_usage.dart`
 
+### For documents:
+-Use doc folder you can see planty of charts diagrams, md files and other helpers witch already ready for your usage.
 ## API
 
 ### Methods
@@ -85,7 +96,6 @@ Listen to `FastSharePlugin.events` Stream for:
   - `rawMessage`: Plain text message for UI display
 
 Log format: `[LEVEL-FastShare-CODE] \x1B[COLORmMESSAGE\x1B[0m`
-<img width="1119" height="270" alt="Screenshot 2025-11-15 212810" src="https://github.com/user-attachments/assets/dc14cab4-ed09-4484-9db0-2545e88ff8f7" />
 
 ## AndroidManifest Permissions
 
@@ -142,8 +152,7 @@ Logs are sent to Flutter via the event stream with `event: "log"` containing:
 - Files are saved to `/sdcard/Download/fastshare/`.
 - For high speeds, ensure devices are close and no interference.
 - Resume is basic; full resume on disconnect not implemented.
-
 - Multi-stream parallel sending can be added by modifying FileSender to use multiple sockets.
 
-# Dev: mortza mansory
 
+''**Creator:mortza manory**''

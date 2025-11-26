@@ -92,8 +92,8 @@ Hotspot created successfully.
 {
   "event": "hotspotStarted",
   "data": {
-    "ssid": "FastShare_1234",
-    "password": "FastShare567890",
+    "ssid": "AndroidShare_1234",
+    "password": "12345678",
     "ip": "192.168.43.1",
     "port": 8080
   }
@@ -108,7 +108,7 @@ Connected to hotspot.
 ```json
 {
   "event": "connectedToHotspot",
-  "data": { "ssid": "FastShare_1234" }
+  "data": { "ssid": "AndroidShare_1234" }
 }
 ```
 

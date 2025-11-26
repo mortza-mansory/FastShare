@@ -41,7 +41,7 @@ Start
 
 1. **Permission Check**: Verify location and nearby devices permissions
 2. **Hotspot Discovery**: Scan for available WiFi hotspots
-3. **Hotspot Selection**: Choose the receiver's hotspot (typically named "FastShare_*")
+3. **Hotspot Selection**: Choose the receiver's hotspot (typically named "AndroidShare_*")
 4. **Connection**: Connect to selected hotspot using SSID and password
 5. **File Transfer**: Establish TCP connection and send files with progress
 6. **Disconnection**: Disconnect from hotspot when done

@@ -60,8 +60,10 @@ Common issues and solutions when using the FastShare Plugin.
 **Solutions**:
 1. Ensure receiver has started hotspot
 2. Check WiFi scanning permissions
-3. Verify location services are enabled
-4. Try manual WiFi refresh
+3. **Verify location services are enabled** (required for WiFi scanning on Android 6+)
+4. Ensure location permission is granted
+5. Try manual WiFi refresh
+6. If location services are disabled, the plugin will automatically prompt to enable them
 
 ### Problem: `connectToHotspot()` fails
 **Symptoms**: Connection timeout or authentication failure.

@@ -1,6 +1,8 @@
 package com.myapp.fastshare_plugin
 
 import android.content.Context
+import android.content.Intent
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -11,6 +13,7 @@ import android.net.wifi.WifiNetworkSpecifier
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import androidx.annotation.RequiresApi
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -43,12 +46,12 @@ class HotspotManager(private val context: Context) {
                 Logger.success("HOTSPOT_SUCCESS", "LocalOnlyHotspot started successfully")
                 this@HotspotManager.reservation = reservation
                 val config = reservation.wifiConfiguration
-                val ssid = config?.SSID ?: "FastShare_${System.currentTimeMillis() % 1000}"
+                val ssid = config?.SSID ?: "AndroidShare"
                 val password = config?.preSharedKey ?: generatePassword()
                 val ip = getHotspotIp()
                 val port = 8080
                 hotspotInfo = HotspotInfo(ssid, password, ip, port)
-                Logger.debug("HOTSPOT_CONFIG", "SSID: $ssid, IP: $ip, Port: $port")
+                Logger.debug("HOTSPOT_CONFIG", "SSID: $ssid, Password: $password, IP: $ip, Port: $port")
                 onSuccess(hotspotInfo!!)
             }
 
@@ -113,6 +116,15 @@ class HotspotManager(private val context: Context) {
 
             override fun onUnavailable() {
                 Logger.error("HOTSPOT_CONNECT_FAIL", "Failed to connect to hotspot network")
+                // Open WiFi settings for manual connection
+                try {
+                    val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Logger.error("HOTSPOT_SETTINGS_FAIL", "Failed to open WiFi settings: ${e.message}")
+                }
                 onFailure("Failed to connect to hotspot")
             }
         }
@@ -178,12 +190,81 @@ class HotspotManager(private val context: Context) {
         return "192.168.43.1" // Default hotspot IP
     }
 
+    fun enableWifi(onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+        Logger.debug("HOTSPOT_ENABLE_WIFI", "Enabling WiFi")
+        try {
+            if (!wifiManager.isWifiEnabled) {
+                @Suppress("DEPRECATION")
+                wifiManager.isWifiEnabled = true
+                // Check if WiFi was actually enabled
+                if (wifiManager.isWifiEnabled) {
+                    Logger.success("HOTSPOT_WIFI_ENABLED", "WiFi enabled successfully")
+                    onSuccess()
+                } else {
+                    Logger.warning("HOTSPOT_WIFI_ENABLE_FAILED", "Failed to enable WiFi programmatically, opening settings")
+                    // Open WiFi settings for user to enable manually
+                    try {
+                        val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                        onFailure("Please enable WiFi in settings and try again")
+                    } catch (e: Exception) {
+                        Logger.error("HOTSPOT_WIFI_SETTINGS_FAIL", "Failed to open WiFi settings: ${e.message}")
+                        onFailure("Failed to enable WiFi and couldn't open settings: ${e.message}")
+                    }
+                }
+            } else {
+                Logger.debug("HOTSPOT_WIFI_ALREADY_ENABLED", "WiFi is already enabled")
+                onSuccess()
+            }
+        } catch (e: Exception) {
+            Logger.error("HOTSPOT_ENABLE_WIFI_ERROR", "Error enabling WiFi: ${e.message}")
+            // Try to open settings as fallback
+            try {
+                val intent = Intent(Settings.ACTION_WIFI_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                onFailure("Failed to enable WiFi programmatically. Please enable WiFi in settings and try again")
+            } catch (settingsException: Exception) {
+                onFailure("Failed to enable WiFi: ${e.message}")
+            }
+        }
+    }
+
     fun scanHotspots(onSuccess: (List<Map<String, Any>>) -> Unit, onFailure: (String) -> Unit) {
         Logger.debug("HOTSPOT_SCAN", "Starting WiFi scan for hotspots")
+
+        // Check if location services are enabled (required for WiFi scanning)
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) &&
+            !locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            Logger.warning("HOTSPOT_LOCATION_DISABLED", "Location services are disabled, cannot scan WiFi")
+            // Open location settings
+            try {
+                val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                onFailure("Location services are disabled. Please enable location services to scan for hotspots.")
+            } catch (e: Exception) {
+                Logger.error("HOTSPOT_LOCATION_SETTINGS_FAIL", "Failed to open location settings: ${e.message}")
+                onFailure("Location services are disabled and settings could not be opened. Please enable location services manually.")
+            }
+            return
+        }
+
         try {
+            // Start a new scan
+            val success = wifiManager.startScan()
+            if (!success) {
+                Logger.warning("HOTSPOT_SCAN_START_FAILED", "Failed to start scan, using cached results")
+            }
+            // Get current results (may include new ones if scan started)
             val scanResults = wifiManager.scanResults
             val hotspots = scanResults.filter { result ->
-                result.SSID.startsWith("FastShare_")
+                result.SSID.startsWith("AndroidShare_")
             }.map { result ->
                 mapOf(
                     "ssid" to result.SSID,
@@ -200,8 +281,9 @@ class HotspotManager(private val context: Context) {
     }
 
     private fun generatePassword(): String {
-        val password = "FastShare" + (100000 + (Math.random() * 900000).toInt())
-        Logger.debug("HOTSPOT_PASSWORD_GEN", "Generated hotspot password")
+        // Use a fixed password for simplicity
+        val password = "12345678"
+        Logger.debug("HOTSPOT_PASSWORD_GEN", "Generated hotspot password: $password")
         return password
     }
 }

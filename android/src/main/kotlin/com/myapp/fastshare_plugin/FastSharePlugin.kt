@@ -1,24 +1,34 @@
 package com.myapp.fastshare_plugin
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.bluetooth.BluetoothAdapter
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONObject
+import java.io.File
 
-class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
+class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler, ActivityAware {
 
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
     private lateinit var context: Context
     private var eventSink: EventChannel.EventSink? = null
+    private var activity: Activity? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private lateinit var hotspotManager: HotspotManager
+    private lateinit var wifiDirectManager: WifiDirectManager
     private lateinit var socketServer: SocketServer
     private lateinit var socketClient: SocketClient
 
@@ -73,6 +83,7 @@ class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCha
         eventChannel.setStreamHandler(this)
 
         hotspotManager = HotspotManager(context)
+        wifiDirectManager = WifiDirectManager(context) { ev -> componentEmit(ev) }
         socketServer = SocketServer { ev -> componentEmit(ev) }
         socketClient  = SocketClient  { ev -> componentEmit(ev) }
 
@@ -208,6 +219,18 @@ class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCha
                 result.success(null)
             }
 
+            "enableWifi" -> {
+                hotspotManager.enableWifi(
+                    onSuccess = {
+                        result.success(null)
+                    },
+                    onFailure = { err ->
+                        emit("errorOccurred", mapOf("message" to err))
+                        result.error("ENABLE_WIFI_FAILED", err, null)
+                    }
+                )
+            }
+
             "scanHotspots" -> {
                 hotspotManager.scanHotspots(
                     onSuccess = { hotspots ->
@@ -220,7 +243,96 @@ class FastSharePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventCha
                 )
             }
 
+            "sendFileViaBluetooth" -> {
+                val filePath = call.argument<String>("filePath")
+                if (filePath != null) {
+                    sendFileViaBluetooth(filePath)
+                    result.success(null)
+                } else {
+                    result.error("INVALID_ARGUMENT", "filePath not provided", null)
+                }
+            }
+
+            // ---------------- WIFI DIRECT ----------------
+            "startWifiDirect" -> {
+                wifiDirectManager.startWifiDirect()
+                result.success(null)
+            }
+
+            "stopWifiDirect" -> {
+                wifiDirectManager.stopWifiDirect()
+                result.success(null)
+            }
+
+            "discoverWifiDirectPeers" -> {
+                wifiDirectManager.discoverPeers()
+                result.success(null)
+            }
+
+            "connectToWifiDirectPeer" -> {
+                val deviceAddress = call.argument<String>("deviceAddress")
+                    ?: return result.error("INVALID_ARG", "Missing deviceAddress", null)
+                wifiDirectManager.connectToPeer(deviceAddress)
+                result.success(null)
+            }
+
+            "getWifiDirectPeers" -> {
+                val peers = wifiDirectManager.getPeers()
+                result.success(peers)
+            }
+
             else -> result.notImplemented()
         }
+    }
+
+    private fun sendFileViaBluetooth(filePath: String) {
+        val originalFile = File(filePath)
+        if (!originalFile.exists()) {
+            Logger.error("BLUETOOTH_SEND", "File does not exist: $filePath")
+            return
+        }
+
+        try {
+            // Copy file to external cache directory for sharing
+            val cacheDir = context.externalCacheDir ?: context.cacheDir
+            val tempFile = File(cacheDir, "sharethis_temp.apk")
+            originalFile.copyTo(tempFile, overwrite = true)
+
+            val uri = FileProvider.getUriForFile(context, "com.myapp.fastshare_plugin.fileprovider", tempFile)
+
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive" // For APK
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            // Start the activity to choose Bluetooth device
+            activity?.startActivity(Intent.createChooser(intent, "Send via Bluetooth"))
+                ?: Logger.error("BLUETOOTH_SEND", "Activity is null, cannot start Bluetooth send")
+
+            // Clean up temp file after a delay
+            Handler(Looper.getMainLooper()).postDelayed({
+                tempFile.delete()
+            }, 30000) // Delete after 30 seconds
+
+        } catch (e: Exception) {
+            Logger.error("BLUETOOTH_SEND", "Failed to prepare file for sharing: ${e.message}")
+        }
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activity = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activity = binding.activity
+    }
+
+    override fun onDetachedFromActivity() {
+        activity = null
     }
 }
